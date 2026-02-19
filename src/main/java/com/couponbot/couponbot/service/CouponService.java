@@ -6,6 +6,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit; // Added for time math
 import java.util.List;
 import java.util.Optional;
 
@@ -18,6 +19,7 @@ public class CouponService {
         this.couponRepo = couponRepo;
     }
 
+    // Existing saveCoupon method...
     public Coupon saveCoupon(Long submittedBy, String code, String platform, String details) {
         Coupon c = new Coupon();
         c.setSubmittedBy(submittedBy);
@@ -29,34 +31,38 @@ public class CouponService {
         return couponRepo.save(c);
     }
 
-    public List<Coupon> listAvailable(int limit) {
-        return couponRepo.findByStatusAndClaimedByIsNullOrderBySubmittedAtDesc(
-                Coupon.Status.AVAILABLE,
-                PageRequest.of(0, limit)
-        );
+    // ✅ New method to get active platforms for the menu
+    public List<String> getAvailablePlatforms() {
+        return couponRepo.findDistinctPlatformsWithAvailableCoupons();
     }
 
+    // ✅ Updated claim logic returning String codes/errors
+    public String claim(Long couponId, Long userId) {
+        // 1. Check 24-hour limit
+        Instant oneDayAgo = Instant.now().minus(1, ChronoUnit.DAYS);
+        if (couponRepo.countByClaimedByAndClaimedAtAfter(userId, oneDayAgo) >= 1) {
+            return "LIMIT_REACHED";
+        }
+
+        // 2. Fetch available coupon
+        Optional<Coupon> opt = couponRepo.findByIdAndStatusAndClaimedByIsNull(couponId, Coupon.Status.AVAILABLE);
+        if (opt.isEmpty()) return "NOT_AVAILABLE";
+
+        Coupon c = opt.get();
+        c.setClaimedBy(userId);
+        c.setClaimedAt(Instant.now());
+        c.setStatus(Coupon.Status.CLAIMED);
+        couponRepo.save(c);
+
+        return c.getCode();
+    }
+
+    // Existing list methods...
     public List<Coupon> listAvailableByPlatform(String platform, int limit) {
         return couponRepo.findByStatusAndClaimedByIsNullAndPlatformIgnoreCaseOrderBySubmittedAtDesc(
                 Coupon.Status.AVAILABLE,
                 platform,
                 PageRequest.of(0, limit)
         );
-    }
-
-    public List<Coupon> listMine(Long userId, int limit) {
-        return couponRepo.findBySubmittedByOrderBySubmittedAtDesc(userId, PageRequest.of(0, limit));
-    }
-
-    public Optional<Coupon> claim(Long couponId, Long userId) {
-        // claim only if AVAILABLE and not claimed yet
-        Optional<Coupon> opt = couponRepo.findByIdAndStatusAndClaimedByIsNull(couponId, Coupon.Status.AVAILABLE);
-        if (opt.isEmpty()) return Optional.empty();
-
-        Coupon c = opt.get();
-        c.setClaimedBy(userId);
-        c.setClaimedAt(Instant.now());
-        c.setStatus(Coupon.Status.CLAIMED);
-        return Optional.of(couponRepo.save(c));
     }
 }

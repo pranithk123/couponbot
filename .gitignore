@@ -1,0 +1,22 @@
+# Maven / Java
+target/
+*.class
+*.log
+
+# IntelliJ
+.idea/
+*.iml
+out/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env / secrets
+.env
+*.env
+application-local.yml
+application-local.properties
+
+# Optional: keep db dumps out
+*.sql

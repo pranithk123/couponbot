@@ -1,0 +1,15 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/couponbot
+    username: postgres
+    password: 262004
+  jpa:
+    hibernate:
+      ddl-auto: update
+  flyway:
+    enabled: true
+app:
+  telegram:
+    token: ${BOT_TOKEN:}
+    username: ${BOT_USERNAME:}
+  requiredChannel: ${REQUIRED_CHANNEL:@yourchannel}

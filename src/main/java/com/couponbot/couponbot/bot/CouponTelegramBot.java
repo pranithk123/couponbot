@@ -96,12 +96,18 @@ public class CouponTelegramBot extends TelegramLongPollingBot {
         }
         else if (state.step == Step.ENTER_CODE) {
             userStates.put(userId, new SubmissionState(state.platform, text, Step.ENTER_DETAILS));
-            reply(chatId, "Great! Now enter a one-line description (e.g., '50% off for new users' or 'Valid on electronics'):");
+            reply(chatId, "Great! Now enter a one-line description (max 100 characters, no line breaks):");
         }
         else if (state.step == Step.ENTER_DETAILS) {
+            // ✅ Enforce 1-2 line limit (approx 100 characters) and prevent multiple line breaks
+            if (text.length() > 100 || text.contains("\n")) {
+                reply(chatId, "❌ **Description too long or multi-line.**\nPlease keep it to one short sentence (max 100 characters) so it fits on a button.");
+                return;
+            }
+
             couponService.saveCoupon(userId, state.code, state.platform, text);
             userStates.remove(userId);
-            reply(chatId, "✅ **Success!** Your coupon for " + state.platform + " has been added to the list. Thank you for your kindness!");
+            reply(chatId, "✅ **Success!** Your coupon for " + state.platform + " has been added. Thank you for your kindness!");
         }
     }
 

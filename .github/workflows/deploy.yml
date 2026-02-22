@@ -2,7 +2,6 @@ name: Build and Deploy
 on:
   push:
     branches: [ main ]
-
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -25,14 +24,18 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Build and push image to ACR
+      - name: Log in to ACR
         run: |
-          az acr build --registry ca46455e5914acr --image couponbot:${{ github.sha }} .
+          az acr login --name ca46455e5914acr
+
+      - name: Build and Push Image
+        run: |
+          docker build -t ca46455e5914acr.azurecr.io/couponbot:${{ github.sha }} .
+          docker push ca46455e5914acr.azurecr.io/couponbot:${{ github.sha }}
 
       - name: Deploy to Container App
         uses: azure/container-apps-deploy-action@v1
         with:
-          acrName: ca46455e5914acr
           resourceGroup: coupon-bot-rg
           containerAppName: coupon-saver-app
           imageToDeploy: ca46455e5914acr.azurecr.io/couponbot:${{ github.sha }}

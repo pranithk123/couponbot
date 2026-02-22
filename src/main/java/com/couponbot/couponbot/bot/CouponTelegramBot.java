@@ -13,6 +13,7 @@ import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMar
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.InlineKeyboardButton;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 
+import java.time.Instant; // ✅ Fix: Added missing import
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -23,7 +24,6 @@ public class CouponTelegramBot extends TelegramLongPollingBot {
     private final ChannelGateService channelGateService;
     private final String username;
 
-    // State tracking for submissions
     private final Map<Long, SubmissionState> userStates = new ConcurrentHashMap<>();
 
     private record SubmissionState(String platform, String code, Step step) {}
@@ -43,20 +43,17 @@ public class CouponTelegramBot extends TelegramLongPollingBot {
     @Override
     public void onUpdateReceived(Update update) {
         try {
-            // 1. Handle Button Clicks (Callback Queries)
             if (update.hasCallbackQuery()) {
                 handleCallbackQuery(update);
                 return;
             }
 
-            // 2. Handle Text Messages
             if (!update.hasMessage() || !update.getMessage().hasText()) return;
 
             String text = update.getMessage().getText().trim();
             long chatId = update.getMessage().getChatId();
             long userId = update.getMessage().getFrom().getId();
 
-            // Main Menu Actions
             if (text.equals("/start")) {
                 userStates.remove(userId);
                 sendMenu(chatId, "Welcome to Coupon Saver! Select an option below to get started:");
@@ -74,11 +71,10 @@ public class CouponTelegramBot extends TelegramLongPollingBot {
             }
 
             if (text.equals("ℹ️ About Us")) {
-                reply(chatId, "🌟 **About Coupon Saver**\n\nThis bot is a community-driven platform where users voluntarily share coupons they won't use so others can benefit.\n\n✅ **Voluntary Submissions**\n✅ **Verified Claims**\n✅ **Fair Use Policy (1 claim/day)**\n\nMade with ❤️ for savers!");
+                reply(chatId, "🌟 **About Coupon Saver**\n\nThis bot is a community-driven platform where users voluntarily share coupons they won't use so others can benefit.\n\n✅ **Voluntary Submissions**\n✅ **Verified Claims**\n✅ **Fair Use Policy (2 claims/day)**\n\nMade with ❤️ for savers!");
                 return;
             }
 
-            // Handle Submission State Machine
             if (userStates.containsKey(userId)) {
                 handleSubmissionSteps(chatId, userId, text);
                 return;
@@ -99,22 +95,20 @@ public class CouponTelegramBot extends TelegramLongPollingBot {
             reply(chatId, "Great! Now enter a one-line description (max 100 characters, no line breaks):");
         }
         else if (state.step == Step.ENTER_DETAILS) {
-            // ✅ Enforce 1-2 line limit (approx 100 characters) and prevent multiple line breaks
             if (text.length() > 100 || text.contains("\n")) {
-                reply(chatId, "❌ **Description too long or multi-line.**\nPlease keep it to one short sentence (max 100 characters) so it fits on a button.");
+                reply(chatId, "❌ **Description too long or multi-line.**\nPlease keep it to one short sentence (max 100 characters).");
                 return;
             }
 
             couponService.saveCoupon(userId, state.code, state.platform, text);
             userStates.remove(userId);
-            reply(chatId, "✅ **Success!** Your coupon for " + state.platform + " has been added. Thank you for your kindness!");
+            reply(chatId, "✅ **Success!** Your coupon for " + state.platform + " has been added.");
         }
     }
 
     private void sendPlatformSelection(long chatId, long userId) throws Exception {
         userStates.put(userId, new SubmissionState(null, null, Step.SELECT_PLATFORM));
         SendMessage msg = new SendMessage(String.valueOf(chatId), "Which platform is this coupon for?");
-
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
         List<String> common = List.of("Canva", "LinkedIn", "BigBasket", "Amazon", "Other");
         for (String p : common) {
@@ -135,7 +129,7 @@ public class CouponTelegramBot extends TelegramLongPollingBot {
             String platform = data.substring(4);
             if (platform.equals("Other")) {
                 userStates.put(userId, new SubmissionState(null, null, Step.ENTER_PLATFORM_NAME));
-                reply(chatId, "Please type the name of the platform (e.g., Zomato, Coursera):");
+                reply(chatId, "Please type the name of the platform:");
             } else {
                 userStates.put(userId, new SubmissionState(platform, null, Step.ENTER_CODE));
                 reply(chatId, "Selected: " + platform + ". Now please paste the Coupon Code or Link:");
@@ -150,8 +144,7 @@ public class CouponTelegramBot extends TelegramLongPollingBot {
         else if (data.startsWith("verify_")) {
             long couponId = Long.parseLong(data.substring(7));
             if (channelGateService.isJoined(this, userId)) {
-                String result = couponService.claim(couponId, userId);
-                handleClaimResult(chatId, result);
+                processClaim(chatId, userId, couponId); // ✅ Resume claim logic
             } else {
                 reply(chatId, "❌ You still haven't joined the channel. Please join " + channelGateService.getRequiredChannel() + " and click verify again!");
             }
@@ -161,11 +154,10 @@ public class CouponTelegramBot extends TelegramLongPollingBot {
     private void sendAvailablePlatforms(long chatId) throws Exception {
         List<String> platforms = couponService.getAvailablePlatforms();
         if (platforms.isEmpty()) {
-            reply(chatId, "No coupons are available at the moment. Check back later!");
+            reply(chatId, "No coupons are available at the moment.");
             return;
         }
-
-        SendMessage msg = new SendMessage(String.valueOf(chatId), "📌 **Available Platforms**\nSelect a platform to see its coupons:");
+        SendMessage msg = new SendMessage(String.valueOf(chatId), "📌 **Available Platforms**");
         msg.setParseMode("Markdown");
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
         for (String p : platforms) {
@@ -179,10 +171,9 @@ public class CouponTelegramBot extends TelegramLongPollingBot {
 
     private void sendCouponsForPlatform(long chatId, String platform) throws Exception {
         List<Coupon> coupons = couponService.listAvailableByPlatform(platform, 10);
-        SendMessage msg = new SendMessage(String.valueOf(chatId), "🎁 **" + platform + " Coupons**\nChoose the one that fits your needs:");
+        SendMessage msg = new SendMessage(String.valueOf(chatId), "🎁 **" + platform + " Coupons**");
         msg.setParseMode("Markdown");
         List<List<InlineKeyboardButton>> rows = new ArrayList<>();
-
         for (Coupon c : coupons) {
             InlineKeyboardButton btn = new InlineKeyboardButton(c.getDetails());
             btn.setCallbackData("claim_" + c.getId());
@@ -193,17 +184,15 @@ public class CouponTelegramBot extends TelegramLongPollingBot {
     }
 
     private void processClaim(long chatId, long userId, long couponId) throws Exception {
+        // ✅ Fix: Gate check first
         if (!channelGateService.isJoined(this, userId)) {
             String channel = channelGateService.getRequiredChannel();
-            SendMessage msg = new SendMessage(String.valueOf(chatId), "🔒 **Join Required**\nYou must be a member of our channel to claim coupons.");
-
+            SendMessage msg = new SendMessage(String.valueOf(chatId), "🔒 **Join Required**");
             List<List<InlineKeyboardButton>> rows = new ArrayList<>();
             InlineKeyboardButton joinBtn = new InlineKeyboardButton("📢 Join Channel");
             joinBtn.setUrl("https://t.me/" + channel.replace("@", ""));
-
             InlineKeyboardButton verifyBtn = new InlineKeyboardButton("✅ I Joined");
             verifyBtn.setCallbackData("verify_" + couponId);
-
             rows.add(List.of(joinBtn));
             rows.add(List.of(verifyBtn));
             msg.setReplyMarkup(new InlineKeyboardMarkup(rows));
@@ -211,18 +200,30 @@ public class CouponTelegramBot extends TelegramLongPollingBot {
             return;
         }
 
-        String result = couponService.claim(couponId, userId);
-        handleClaimResult(chatId, result);
+        // ✅ Fix: Check daily limit manually since claim() returns Optional
+        Instant oneDayAgo = Instant.now().minus(1, java.time.temporal.ChronoUnit.DAYS);
+        if (couponService.getClaimCount(userId, oneDayAgo) >= 2) {
+            reply(chatId, "❌ **Daily Limit Reached**\nYou can only claim up to two coupons every 24 hours!");
+            return;
+        }
+
+        Optional<Coupon> result = couponService.claim(couponId, userId);
+        if (result.isPresent()) {
+            handleClaimResult(chatId, result.get());
+        } else {
+            reply(chatId, "❌ Sorry, this coupon was just claimed by another user.");
+        }
     }
 
-    private void handleClaimResult(long chatId, String result) throws Exception {
-        if (result.equals("LIMIT_REACHED")) {
-            reply(chatId, "❌ **Daily Limit Reached**\nYou can only claim one coupon per day to give others a chance!");
-        } else if (result.equals("NOT_AVAILABLE")) {
-            reply(chatId, "❌ Sorry, this coupon was just claimed by another user.");
-        } else {
-            reply(chatId, "✅ **Coupon Claimed!**\n\nYour code/link is:\n`" + result + "`\n\nUse it quickly before it expires!");
-        }
+    private void handleClaimResult(long chatId, Coupon c) throws Exception {
+        // ✅ Added the description (details) below the code as requested
+        String response = "✅ **Coupon Claimed!**\n\n" +
+                "Your code/link is:\n" +
+                "`" + c.getCode() + "`\n\n" +
+                "ℹ️ **Coupon Description:**\n" +
+                "_" + c.getDetails() + "_\n\n" +
+                "Use it quickly before it expires!";
+        reply(chatId, response);
     }
 
     private void sendMenu(long chatId, String text) throws Exception {
@@ -252,4 +253,3 @@ public class CouponTelegramBot extends TelegramLongPollingBot {
         return markup;
     }
 }
-

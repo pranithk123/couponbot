@@ -1,22 +1,4 @@
-name: Build and Deploy
-on:
-  push:
-    branches: [ main ]
-jobs:
-  build-and-deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v3
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: maven
-
-      - name: Build with Maven
+- name: Build with Maven
         run: mvn clean package -DskipTests
 
       - name: Log in to Azure
@@ -27,12 +9,11 @@ jobs:
       - name: Deploy to Container App
         uses: azure/container-apps-deploy-action@v1
         with:
-          # This tells Azure exactly where your finished JAR is
-          appSourcePath: ${{ github.workspace }} 
+          # Point this directly to the folder containing your JAR
+          appSourcePath: ${{ github.workspace }}/target
           acrName: ca46455e5914acr
           resourceGroup: coupon-bot-rg
           containerAppName: coupon-saver-app
           containerAppEnvironment: managedEnvironment-couponbotrg-aad5
           targetPort: 8080
-          # This explicitly tells Oryx to use Java
           runtime: java

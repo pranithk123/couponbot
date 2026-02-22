@@ -1,4 +1,23 @@
-- name: Build with Maven
+name: Build and Deploy
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: maven
+
+      - name: Build with Maven
         run: mvn clean package -DskipTests
 
       - name: Log in to Azure
@@ -9,11 +28,14 @@
       - name: Deploy to Container App
         uses: azure/container-apps-deploy-action@v1
         with:
-          # Point this directly to the folder containing your JAR
+          # Points specifically to the folder where Maven puts your JAR file
           appSourcePath: ${{ github.workspace }}/target
+          # Your successfully registered registry
           acrName: ca46455e5914acr
           resourceGroup: coupon-bot-rg
           containerAppName: coupon-saver-app
+          # Your specific environment in Central India
           containerAppEnvironment: managedEnvironment-couponbotrg-aad5
           targetPort: 8080
+          # Forces the builder to treat the artifact as a Java application
           runtime: java

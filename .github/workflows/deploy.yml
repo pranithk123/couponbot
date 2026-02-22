@@ -18,6 +18,7 @@ jobs:
         uses: azure/container-apps-deploy-action@v1
         with:
           appSourcePath: ${{ github.workspace }}
+          acrName: ca46455e5914acr
           resourceGroup: coupon-bot-rg
           containerAppName: coupon-saver-app
           containerAppEnvironment: managedEnvironment-couponbotrg-aad5
